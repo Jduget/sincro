@@ -24,7 +24,7 @@
     <div class="container mx-auto p-4 md:p-8 max-w-6xl">
         <h1 class="text-3xl font-bold mb-6 text-blue-700">Editor de "TipoDocumentos"</h1>
         <p class="mb-6 text-gray-600">
-            Proyecto: <code class="bg-gray-200 px-2 py-1 rounded">ia-inmobiliaria</code>
+            Proyecto: <code id="project-id" class="bg-gray-200 px-2 py-1 rounded">ia-inmobiliaria</code>
         </p>
 
         <!-- Contenedor principal: Lista a la izquierda, formulario a la derecha -->
@@ -116,15 +116,19 @@
             setLogLevel
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Configuración de Firebase (proporcionada por el usuario) ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBRk8QzWMAd8sErwFtb8AsCldQTMMZ9yrU",
-            authDomain: "iainmobiliaria.firebaseapp.com",
-            projectId: "iainmobiliaria",
-            storageBucket: "iainmobiliaria.firebasestorage.app",
-            messagingSenderId: "259064802355",
-            appId: "1:259064802355:web:d0aa9d10bca1a6025e4746"
-        };
+        // --- Configuración de Firebase (proporcionada por el entorno) ---
+        // *** CORRECCIÓN: Usar __firebase_config del entorno en lugar de la configuración harcodeada ***
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config)
+            : {
+                // Fallback de configuración (para desarrollo local, pero no funcionará con el token de Canvas)
+                apiKey: "AIzaSyBRk8QzWMAd8sErwFtb8AsCldQTMMZ9yrU",
+                authDomain: "iainmobiliaria.firebaseapp.com",
+                projectId: "iainmobiliaria",
+                storageBucket: "iainmobiliaria.firebasestorage.app",
+                messagingSenderId: "259064802355",
+                appId: "1:259064802355:web:d0aa9d10bca1a6025e4746"
+            };
 
         // --- Variables Globales de la App ---
         const COLLECTION_NAME = "TipoDocumentos";
@@ -142,6 +146,7 @@
         const btnSave = document.getElementById("btn-save");
         const btnDelete = document.getElementById("btn-delete");
         const btnClear = document.getElementById("btn-clear");
+        const projectIdElement = document.getElementById("project-id");
 
         /**
          * Muestra un mensaje de estado al usuario.
@@ -307,6 +312,11 @@
          * Función principal de inicialización.
          */
         async function main() {
+            // Actualizar UI con el projectId
+            if (firebaseConfig.projectId) {
+                projectIdElement.textContent = firebaseConfig.projectId;
+            }
+            
             // Inicializar Firebase
             try {
                 const app = initializeApp(firebaseConfig);
@@ -316,8 +326,8 @@
                 // Habilitar logs de Firestore para depuración
                 setLogLevel('debug');
 
-                // Obtener el App ID del entorno o usar el projectId como fallback
-                const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+                // *** CORRECCIÓN: Usar __app_id del entorno o un fallback estándar ***
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                 collectionPath = `artifacts/${appId}/public/data/${COLLECTION_NAME}`;
 
                 console.log(`Ruta de la colección: ${collectionPath}`);
