@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor de TipoDocumentos</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Estilo para la fuente Inter, preferida por Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Añadimos un estilo para que el textarea parezca de código */
+        #doc-data {
+            font-family: monospace;
+        }
+    </style>
+    <!-- Importar la fuente Inter -->
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <h1 class="text-3xl font-bold mb-6 text-blue-700">Editor de "TipoDocumentos"</h1>
+        <p class="mb-6 text-gray-600">
+            Proyecto: <code class="bg-gray-200 px-2 py-1 rounded">ia-inmobiliaria</code>
+        </p>
+
+        <!-- Contenedor principal: Lista a la izquierda, formulario a la derecha -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <!-- Columna 1: Lista de Documentos -->
+            <div class="md:col-span-1 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Documentos Existentes</h2>
+                <div id="doc-list" class="flex flex-col space-y-2 max-h-screen overflow-y-auto">
+                    <!-- Los documentos se cargarán aquí -->
+                    <p id="list-loading" class="text-gray-500">Cargando lista...</p>
+                </div>
+            </div>
+
+            <!-- Columna 2: Formulario de Edición -->
+            <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Editor de Documento</h2>
+                <form id="doc-form">
+                    <div class="mb-4">
+                        <label for="doc-id" class="block text-sm font-medium text-gray-700 mb-1">
+                            Nombre del Documento (ID)
+                        </label>
+                        <input type="text" id="doc-id" name="doc-id"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="Ej: Contrato de Arriendo" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="doc-data" class="block text-sm font-medium text-gray-700 mb-1">
+                            Datos del Documento (en formato JSON)
+                        </label>
+                        <textarea id="doc-data" name="doc-data" rows="12"
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder='{
+    "descripcion": "Plantilla para...",
+    "version": 1.2,
+    "campos_requeridos": ["nombre", "rut"]
+}'></textarea>
+                    </div>
+
+                    <!-- Botones de Acción -->
+                    <div class="flex flex-wrap gap-3">
+                        <button type="button" id="btn-load"
+                                class="bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                            Cargar
+                        </button>
+                        <button type="submit" id="btn-save"
+                                class="bg-green-600 text-white px-4 py-2 rounded-md font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                            Crear / Actualizar
+                        </button>
+                        <button type="button" id="btn-delete"
+                                class="bg-red-600 text-white px-4 py-2 rounded-md font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                            Eliminar
+                        </button>
+                        <button type="button" id="btn-clear"
+                                class="bg-gray-500 text-white px-4 py-2 rounded-md font-medium hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
+                            Limpiar Formulario
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Mensajes de Estado -->
+        <div id="status-message" class="mt-6 p-4 rounded-md text-sm transition-opacity duration-300 opacity-0">
+            <!-- Los mensajes de éxito o error aparecerán aquí -->
+        </div>
+
+    </div> <!-- fin .container -->
+
+    <!-- Scripts de Firebase -->
+    <script type="module">
+        // Importar funciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged,
+            signInWithCustomToken
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            deleteDoc, 
+            collection, 
+            onSnapshot,
+            setLogLevel
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Configuración de Firebase (proporcionada por el usuario) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRk8QzWMAd8sErwFtb8AsCldQTMMZ9yrU",
+            authDomain: "iainmobiliaria.firebaseapp.com",
+            projectId: "iainmobiliaria",
+            storageBucket: "iainmobiliaria.firebasestorage.app",
+            messagingSenderId: "259064802355",
+            appId: "1:259064802355:web:d0aa9d10bca1a6025e4746"
+        };
+
+        // --- Variables Globales de la App ---
+        const COLLECTION_NAME = "TipoDocumentos";
+        let db, auth;
+        let collectionPath = ""; // Se definirá después de la autenticación
+
+        // --- Referencias a elementos del DOM ---
+        const docList = document.getElementById("doc-list");
+        const listLoading = document.getElementById("list-loading");
+        const docIdInput = document.getElementById("doc-id");
+        const docDataTextarea = document.getElementById("doc-data");
+        const statusMessage = document.getElementById("status-message");
+        const docForm = document.getElementById("doc-form");
+        const btnLoad = document.getElementById("btn-load");
+        const btnSave = document.getElementById("btn-save");
+        const btnDelete = document.getElementById("btn-delete");
+        const btnClear = document.getElementById("btn-clear");
+
+        /**
+         * Muestra un mensaje de estado al usuario.
+         * @param {string} message - El mensaje a mostrar.
+         * @param {boolean} isError - true si es un error, false si es éxito.
+         */
+        function showMessage(message, isError = false) {
+            statusMessage.textContent = message;
+            statusMessage.classList.remove("opacity-0");
+            if (isError) {
+                statusMessage.classList.remove("bg-green-100", "text-green-800");
+                statusMessage.classList.add("bg-red-100", "text-red-800");
+            } else {
+                statusMessage.classList.remove("bg-red-100", "text-red-800");
+                statusMessage.classList.add("bg-green-100", "text-green-800");
+            }
+            // Ocultar el mensaje después de 5 segundos
+            setTimeout(() => {
+                statusMessage.classList.add("opacity-0");
+            }, 5000);
+        }
+
+        /**
+         * Limpia el formulario.
+         */
+        function handleClearForm() {
+            docForm.reset();
+            // docIdInput.value = "";
+            // docDataTextarea.value = "";
+            docIdInput.disabled = false;
+        }
+
+        /**
+         * Carga los datos de un documento en el formulario.
+         * @param {string} [id] - El ID del documento a cargar. Si está vacío, usa el valor del input.
+         */
+        async function handleLoadDocument(id) {
+            const docId = id || docIdInput.value;
+            if (!docId) {
+                showMessage("Por favor, introduce un ID de documento para cargar.", true);
+                return;
+            }
+
+            try {
+                const docRef = doc(db, collectionPath, docId);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists()) {
+                    docIdInput.value = docSnap.id;
+                    docIdInput.disabled = true; // Deshabilitar ID al cargar para evitar cambios
+                    // Formatear el JSON para mostrarlo bonito
+                    docDataTextarea.value = JSON.stringify(docSnap.data(), null, 2);
+                    showMessage(`Documento "${docId}" cargado correctamente.`, false);
+                } else {
+                    showMessage(`El documento con ID "${docId}" no existe.`, true);
+                }
+            } catch (error) {
+                console.error("Error al cargar documento: ", error);
+                showMessage(`Error al cargar documento: ${error.message}`, true);
+            }
+        }
+
+        /**
+         * Guarda (Crea o Actualiza) un documento.
+         */
+        async function handleSaveDocument(event) {
+            event.preventDefault(); // Evitar que el formulario se envíe
+            
+            const docId = docIdInput.value;
+            const docDataString = docDataTextarea.value;
+
+            if (!docId) {
+                showMessage("El Nombre del Documento (ID) no puede estar vacío.", true);
+                return;
+            }
+
+            let jsonData;
+            try {
+                // Si el textarea está vacío, guardamos un objeto vacío
+                jsonData = docDataString ? JSON.parse(docDataString) : {};
+            } catch (error) {
+                showMessage(`Los datos no son un JSON válido: ${error.message}`, true);
+                return;
+            }
+
+            try {
+                const docRef = doc(db, collectionPath, docId);
+                // setDoc sobrescribirá o creará el documento
+                await setDoc(docRef, jsonData);
+                
+                showMessage(`Documento "${docId}" guardado correctamente.`, false);
+                handleClearForm(); // Limpiar formulario después de guardar
+            } catch (error) {
+                console.error("Error al guardar documento: ", error);
+                showMessage(`Error al guardar documento: ${error.message}`, true);
+            }
+        }
+
+        /**
+         * Elimina un documento.
+         */
+        async function handleDeleteDocument() {
+            const docId = docIdInput.value;
+            if (!docId) {
+                showMessage("Por favor, carga o introduce un ID de documento para eliminar.", true);
+                return;
+            }
+
+            // NO USAMOS window.confirm() porque está prohibido en el entorno.
+            // La acción es directa al hacer clic.
+            
+            try {
+                const docRef = doc(db, collectionPath, docId);
+                await deleteDoc(docRef);
+
+                showMessage(`Documento "${docId}" eliminado correctamente.`, false);
+                handleClearForm();
+            } catch (error) {
+                console.error("Error al eliminar documento: ", error);
+                showMessage(`Error al eliminar documento: ${error.message}`, true);
+            }
+        }
+
+        /**
+         * Escucha cambios en la colección y actualiza la lista.
+         */
+        function listenToDocuments() {
+            const collectionRef = collection(db, collectionPath);
+            
+            onSnapshot(collectionRef, (snapshot) => {
+                listLoading.style.display = 'none'; // Ocultar mensaje de carga
+                docList.innerHTML = ''; // Limpiar lista
+                
+                if (snapshot.empty) {
+                    docList.innerHTML = '<p class="text-gray-500">No hay documentos en esta colección.</p>';
+                    return;
+                }
+
+                snapshot.docs.forEach(doc => {
+                    const docEl = document.createElement("button");
+                    docEl.type = "button";
+                    docEl.textContent = doc.id;
+                    docEl.setAttribute("data-id", doc.id);
+                    docEl.className = "w-full text-left p-2 rounded-md bg-gray-50 hover:bg-blue-100 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500";
+                    
+                    // Al hacer clic en un item de la lista, se carga en el formulario
+                    docEl.addEventListener("click", () => {
+                        handleLoadDocument(doc.id);
+                    });
+                    
+                    docList.appendChild(docEl);
+                });
+
+            }, (error) => {
+                console.error("Error al escuchar la colección: ", error);
+                showMessage(`Error al cargar la lista de documentos: ${error.message}`, true);
+                listLoading.style.display = 'none';
+                docList.innerHTML = '<p class="text-red-500">Error al cargar la lista.</p>';
+            });
+        }
+
+        /**
+         * Función principal de inicialización.
+         */
+        async function main() {
+            // Inicializar Firebase
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Habilitar logs de Firestore para depuración
+                setLogLevel('debug');
+
+                // Obtener el App ID del entorno o usar el projectId como fallback
+                const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+                collectionPath = `artifacts/${appId}/public/data/${COLLECTION_NAME}`;
+
+                console.log(`Ruta de la colección: ${collectionPath}`);
+
+                // Configurar Listeners de botones
+                docForm.addEventListener("submit", handleSaveDocument);
+                btnLoad.addEventListener("click", () => handleLoadDocument());
+
+                btnDelete.addEventListener("click", handleDeleteDocument);
+                btnClear.addEventListener("click", handleClearForm);
+
+                // --- Autenticación de Firebase ---
+                // Escuchar cambios de estado de autenticación
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        // Usuario ya autenticado
+                        console.log("Usuario autenticado:", user.uid);
+                        // Una vez autenticados, empezamos a escuchar los documentos
+                        listenToDocuments();
+                    } else {
+                        // Usuario no autenticado, intentar autenticación
+                        console.log("Sin usuario, intentando autenticación...");
+                        try {
+                            // Comprobar si hay un token inicial (entorno de Canvas)
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                console.log("Iniciando sesión con Custom Token...");
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                // Fallback a inicio anónimo
+                                console.log("Iniciando sesión anónimamente...");
+                                await signInAnonymously(auth);
+                            }
+                        } catch (error) {
+                            console.error("Error de autenticación:", error);
+                            showMessage(`Error crítico de autenticación: ${error.message}`, true);
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                showMessage(`No se pudo inicializar Firebase. Revisa la configuración. ${error.message}`, true);
+            }
+        }
+
+        // Iniciar la aplicación cuando el DOM esté listo
+        document.addEventListener("DOMContentLoaded", main);
+
+    </script>
+</body>
+</html>
